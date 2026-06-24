@@ -18,7 +18,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from .auth import usuario_actual
-from .db import conexion, dict_cursor, esperar_bd, init_schema
+from .db import conexion, dict_cursor, esperar_bd, init_schema, ping
 
 
 @asynccontextmanager
@@ -53,10 +53,25 @@ class ReclamarRequest(BaseModel):
     monto_base: float = Field(default=0, ge=0, description="Base para bonos por porcentaje")
 
 
-# TODO (alumno): implementar las rutas de salud que usará Kubernetes:
-#   - liveness: ¿el proceso está vivo? (respuesta simple).
-#   - readiness: ¿está listo para recibir tráfico? Debe verificar la BD.
-# Luego configurar livenessProbe/readinessProbe en el Deployment de EKS.
+@app.get("/livez")
+def liveness():
+    """
+    Liveness: ¿el proceso está vivo?
+    No depende de la BD. Si esto falla, Kubernetes reinicia el pod.
+    """
+    return {"status": "ok"}
+
+
+@app.get("/readyz")
+def readiness():
+    """
+    Readiness: ¿está listo para recibir tráfico?
+    Verifica conexión a PostgreSQL. Si falla, Kubernetes saca el pod
+    del balanceo sin reiniciarlo.
+    """
+    if ping():
+        return {"status": "ok", "db": "connected"}
+    raise HTTPException(status_code=503, detail="Base de datos no disponible")
 
 
 @app.get("/api/bonos")
